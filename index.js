@@ -40,10 +40,8 @@ const createAccounts = () => Promise.all([
 
 const createCustomers = ({ users }) =>
   Promise.all(users.map(user => stripe.customers.create(
-    {
-      email: user.email,
-      description: user.email,
-    }
+    {email: user.email},
+    {stripe_account: user.id}
   )))
   .then(displayResult('create customers'))
   .then(customers => Object.assign(store, { customers }));
@@ -114,22 +112,51 @@ const clean = (limit) =>
 
 const createCard = (req, res) => {
   const { body: { token } } = req;
-  const { customers: [user] } = store;
+  // const { customers: [customer] } = store;
+  // const { users: [user] } = store;
 
-  console.log(user.id)
-
-  stripe.customers.create({
-    description: 'Customer for sophia.jones@example.com',
-    source: token.id,
-  // stripe.customers.createSource('cus_D8bnegadfGbQQu', {
+  const email = 'tenant@rentoo.co.uk';
+  Promise.all([
+    stripe.accounts.create({
+      type: 'custom',
+      country: 'GB',
+      email,
+    }),
+    stripe.customers.create({
+      email,
+      description: 'A new tenant',
+      source: token.id,
+    })])
+    .then(([account, customer]) => stripe.tokens.create({ customer: customer.id }, { stripe_account: account.id }))
+  // stripe.customers.create({
+  //   description: 'Customer for sophia.jones@example.com',
   //   source: token.id,
-  })
+  // })
+
+  // stripe.accounts.createExternalAccount(
+  //   'acct_1Chy7wAbkXS1rGRX',
+  //   { external_account: 'tok_visa_debit' },
+  // }
+
+  // stripe.accounts.createExternalAccount(
+  //   user.id,
+  //   { external_account: token.id }
+  // )
+
+  // stripe.customers.createSource(customer.id, {
+  //   source: token.id,
+  // })
+
   .then(displayResult('create card'))
+  // .then(token => tenantPayment({ token: token.id, amount: 10000 })())
+  // .then(landlordTransfer({ amount: 5000 }))
   .then(result => res.status(200).jsonp(result))
   .catch((err) => {
     console.log(err)
     res.sendStatus(500);
   });
+
+  // res.status(200).jsonp(token)
 };
 
 const payment = (req, res) => {
@@ -141,11 +168,9 @@ const payment = (req, res) => {
 app.post('/api/payement', payment);
 app.post('/api/create-card', createCard);
 
-// getCustomer('cus_D8bnegadfGbQQu')
 clean(100)
   .then(createAccounts)
-  .then(createCustomers)
-  .then(() => listCustomers(100));
+  // .then(createCustomers)
   // .then(tenantPayment({ amount: 1000, token: 'tok_mastercard_debit_transferSuccess' }))
   // .then(tenantPayment({ amount: 2000, token: 'tok_mastercard_debit_transferSuccess' }))
   // .then(landlordTransfer({ amount: 2000 }))
