@@ -26,6 +26,7 @@ const displayResult = step => (res) => {
   console.log(step);
   console.log('----------------------');
   console.log(res);
+  console.log('\n\n\n\n');
   return res;
 };
 
@@ -39,10 +40,12 @@ const createAccounts = () => Promise.all([
 
 const createCustomers = ({ users }) =>
   Promise.all(users.map(user => stripe.customers.create(
-    {email: user.email},
-    {stripe_account: user.id}
+    {
+      email: user.email,
+      description: user.email,
+    }
   )))
-  // .then(displayResult('create customers'))
+  .then(displayResult('create customers'))
   .then(customers => Object.assign(store, { customers }));
 
 const tenantPayment = ({ amount, token }) => () =>
@@ -79,17 +82,50 @@ const getCustomer = (...customers) =>
 const listCustomers = limit =>
   stripe.customers
     .list({ limit })
-    .then(displayResult('list customers'));
+    .then(res => res.data)
+    // .then(displayResult('list customers'));
+
+const listAccounts = limit =>
+  stripe.accounts
+    .list({ limit })
+    .then(res => res.data)
+    // .then(displayResult('list accounts'));
+
+
+const clean = (limit) =>
+  Promise.all([
+    listCustomers(limit),
+    listAccounts(limit),
+  ])
+  .then(([customers, accounts]) => {
+    const deleteCustomers = customers.map(cursor => stripe.customers.del(cursor.id));
+    const deleteAccounts = accounts.map(cursor => stripe.accounts.del(cursor.id));
+    return Promise.all([
+      ...deleteCustomers,
+      ...deleteAccounts
+    ]);
+  });
+
+
+
+/* --------------------- */
+/* MIDDLEWARE            */
+/* --------------------- */
 
 const createCard = (req, res) => {
   const { body: { token } } = req;
   const { customers: [user] } = store;
 
-  stripe.customers.createSource('cus_D8bnegadfGbQQu', {
+  console.log(user.id)
+
+  stripe.customers.create({
+    description: 'Customer for sophia.jones@example.com',
     source: token.id,
+  // stripe.customers.createSource('cus_D8bnegadfGbQQu', {
+  //   source: token.id,
   })
   .then(displayResult('create card'))
-  .then(res => res.status(200).jsonp(res))
+  .then(result => res.status(200).jsonp(result))
   .catch((err) => {
     console.log(err)
     res.sendStatus(500);
@@ -101,11 +137,13 @@ const payment = (req, res) => {
   res.status(200).jsonp(token);
 };
 
+
 app.post('/api/payement', payment);
 app.post('/api/create-card', createCard);
 
 // getCustomer('cus_D8bnegadfGbQQu')
-createAccounts()
+clean(100)
+  .then(createAccounts)
   .then(createCustomers)
   .then(() => listCustomers(100));
   // .then(tenantPayment({ amount: 1000, token: 'tok_mastercard_debit_transferSuccess' }))
