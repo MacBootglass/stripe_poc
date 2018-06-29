@@ -24,6 +24,10 @@ var style = {
   }
 };
 
+// document.getElementById('click').addEventListener('click', function(evt) {
+//     console.log(evt);
+// })
+
 // Create an instance of the card Element.
 var card = elements.create('card', {style: style});
 

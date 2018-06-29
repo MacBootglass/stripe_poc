@@ -6,7 +6,7 @@
   "author": "Thibault Théologien <thibault.theologien@insa-rouen.fr>",
   "license": "The Unlicense",
   "scripts": {
-    "start": "node index.js",
+    "start": "nodemon --watch index.js index.js",
     "webpack": "webpack"
   },
   "devDependencies": {
@@ -23,6 +23,7 @@
   "dependencies": {
     "eslint": "^4.19.1",
     "express": "^4.16.3",
+    "nodemon": "^1.17.5",
     "stripe": "^6.2.0"
   }
 }
