@@ -44,6 +44,26 @@ card.addEventListener('change', function(event) {
   }
 });
 
+// document.getElementById('pay').addEventListener('click', function(evt) {
+//   console.log(evt);
+// })
+
+
+document.getElementById('pay').addEventListener('click', function(evt) {
+  console.log(evt);
+  axios({
+    method: 'post',
+    url: '/api/payment',
+  })
+    .then((response) => {
+      console.log(response.data);
+    })
+    .catch((error) => {
+      console.log(error);
+    });
+});
+
+
 // Handle form submission.
 var form = document.getElementById('payment-form');
 form.addEventListener('submit', function(event) {

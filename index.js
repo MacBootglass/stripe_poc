@@ -7,6 +7,11 @@ const {
 const CURRENCY = 'gbp';
 const TRANSFER_GROUP = 'RENT';
 
+const tenantAccountId = 'acct_1CiO7kB38juqwZ48';
+const tenantCustomerId = 'cus_D8fSPD85qw32vN';
+const landlordAccountId = 'acct_1CiPQZGsJM8irX6E';
+
+
 const bodyParser = require('body-parser');
 const express = require('express');
 const stripe = require('stripe')(STRIPE_API_KEY);
@@ -46,30 +51,30 @@ const createCustomers = ({ users }) =>
   .then(displayResult('create customers'))
   .then(customers => Object.assign(store, { customers }));
 
-const tenantPayment = ({ amount, token }) => () =>
+const userPayment = ({ amount, customer }) => () =>
   stripe.charges
     .create({
       amount,
       currency: CURRENCY,
-      source: token,
+      customer,
       transfer_group: TRANSFER_GROUP,
     })
-    .then(displayResult('tenant payment'))
+    .then(displayResult('payment'))
     .then(charges => Object.assign(store, {
-      charges: [...store.charges, charges],
+      charges: [...(store.charges || []), charges],
     }));
 
-const landlordTransfer = ({ amount }) => () =>
+const userTransfer = ({ amount, account }) => () =>
   stripe.transfers
     .create({
       amount,
       currency: CURRENCY,
-      destination: store.users[2].id,
+      destination: account,
       transfer_group: TRANSFER_GROUP,
     })
     .then(displayResult('landlord transfer'))
     .then(charges => Object.assign(store, {
-      transfers: [...store.transfers, transfers],
+      transfers: [...(store.transfers || []), transfers],
     }));
 
 const getCustomer = (...customers) =>
@@ -116,18 +121,31 @@ const createCard = (req, res) => {
   // const { users: [user] } = store;
 
   const email = 'tenant@rentoo.co.uk';
-  Promise.all([
-    stripe.accounts.create({
-      type: 'custom',
-      country: 'GB',
-      email,
-    }),
-    stripe.customers.create({
+  // Promise.all([
+  //   stripe.accounts.create({
+  //     type: 'custom',
+  //     country: 'GB',
+  //     email,
+  //   }),
+  //   stripe.customers.create({
+  //     email,
+  //     description: 'A new tenant',
+  //     source: token.id,
+  //   })])
+  //   .then(([account, customer]) => stripe.tokens.create(
+  //     { customer: customer.id },
+  //     { stripe_account: account.id }
+  //   ))
+
+  stripe.customers
+    .create({
       email,
       description: 'A new tenant',
       source: token.id,
-    })])
-    .then(([account, customer]) => stripe.tokens.create({ customer: customer.id }, { stripe_account: account.id }))
+    })
+    .then(displayResult('customer'))
+
+
   // stripe.customers.create({
   //   description: 'Customer for sophia.jones@example.com',
   //   source: token.id,
@@ -147,9 +165,8 @@ const createCard = (req, res) => {
   //   source: token.id,
   // })
 
-  .then(displayResult('create card'))
-  // .then(token => tenantPayment({ token: token.id, amount: 10000 })())
-  // .then(landlordTransfer({ amount: 5000 }))
+  .then(customer => userPayment({ customer: customer.id, amount: 100000 })())
+  .then(userTransfer({ account: landlordAccountId, amount: 5000 }))
   .then(result => res.status(200).jsonp(result))
   .catch((err) => {
     console.log(err)
@@ -160,16 +177,26 @@ const createCard = (req, res) => {
 };
 
 const payment = (req, res) => {
-  const { body: { token } } = req;
-  res.status(200).jsonp(token);
+  stripe.tokens
+    .create(
+      { customer: tenantCustomerId },
+      { stripe_account: tenantAccountId }
+    )
+    .then(tok => userPayment({ token: tok.id, amount: 100000 })())
+    .then(userTransfer({ account: landlordAccountId, amount: 5000 }))
+    .then(result => res.status(200).jsonp(result))
+    .catch((err) => {
+      console.log(err)
+      res.sendStatus(500);
+    });
 };
 
 
-app.post('/api/payement', payment);
+app.post('/api/payment', payment);
 app.post('/api/create-card', createCard);
 
-clean(100)
-  .then(createAccounts)
+// clean(100)
+  // .then(createAccounts)
   // .then(createCustomers)
   // .then(tenantPayment({ amount: 1000, token: 'tok_mastercard_debit_transferSuccess' }))
   // .then(tenantPayment({ amount: 2000, token: 'tok_mastercard_debit_transferSuccess' }))
