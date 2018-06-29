@@ -18,81 +18,14 @@ app.use(express.static('public'));
 
 app.listen(SERVER_PORT, SERVER_HOST);
 
-
-
-const tenant1 = {
-  type: 'custom',
-  country: 'GB',
-  email: 'tenant1@rentoo.co.uk',
-  legal_entity: {
-    address: {
-      city: 'London',
-      country: 'GB',
-      line1: '4 sulgrave gardens',
-      postal_code: 'W67RA',
-    },
-    dob: {
-      day: 4,
-      month: 12,
-      year: 1995,
-    },
-    first_name: 'Tenant One',
-    last_name: 'Rentoo',
-  },
-  type: 'custom',
-};
-
-const tenant2 = {
-  type: 'custom',
-  country: 'GB',
-  email: 'tenant2@rentoo.co.uk',
-  legal_entity: {
-    address: {
-      city: 'London',
-      country: 'GB',
-      line1: '5 sulgrave gardens',
-      postal_code: 'W67RA',
-    },
-    dob: {
-      day: 5,
-      month: 12,
-      year: 1995,
-    },
-    first_name: 'Tenant Two',
-    last_name: 'Rentoo',
-  },
-  type: 'custom',
-};
-
-const landlord = {
-  type: 'custom',
-  country: 'GB',
-  email: 'landlord@rentoo.co.uk',
-  legal_entity: {
-    address: {
-      city: 'London',
-      country: 'GB',
-      line1: '6 sulgrave gardens',
-      postal_code: 'W67RA',
-    },
-    dob: {
-      day: 6,
-      month: 12,
-      year: 1995,
-    },
-    first_name: 'Landlord',
-    last_name: 'Rentoo',
-  },
-  type: 'custom',
-};
-
+const store = {};
+const { tenant1, tenant2, landlord } = require('./users');
 
 const displayResult = step => (res) => {
   console.log('----------------------');
   console.log(step);
   console.log('----------------------');
   console.log(res);
-  console.log('\n\n\n\n');
   return res;
 };
 
@@ -101,9 +34,18 @@ const createAccounts = () => Promise.all([
   stripe.accounts.create(tenant2),
   stripe.accounts.create(landlord),
 ])
-.then(displayResult('user creation'));
+// .then(displayResult('user creation'))
+.then(users => Object.assign(store, { users }));
 
-const tenantPayment = ({ amount, token }) => users =>
+const createCustomers = ({ users }) =>
+  Promise.all(users.map(user => stripe.customers.create(
+    {email: user.email},
+    {stripe_account: user.id}
+  )))
+  // .then(displayResult('create customers'))
+  .then(customers => Object.assign(store, { customers }));
+
+const tenantPayment = ({ amount, token }) => () =>
   stripe.charges
     .create({
       amount,
@@ -112,46 +54,60 @@ const tenantPayment = ({ amount, token }) => users =>
       transfer_group: TRANSFER_GROUP,
     })
     .then(displayResult('tenant payment'))
-    .then(() => users);
+    .then(charges => Object.assign(store, {
+      charges: [...store.charges, charges],
+    }));
 
-const landlordTransfer = ({ amount }) => users =>
+const landlordTransfer = ({ amount }) => () =>
   stripe.transfers
     .create({
       amount,
       currency: CURRENCY,
-      destination: users[2].id,
+      destination: store.users[2].id,
       transfer_group: TRANSFER_GROUP,
     })
     .then(displayResult('landlord transfer'))
-    .then(() => users);
+    .then(charges => Object.assign(store, {
+      transfers: [...store.transfers, transfers],
+    }));
 
+const getCustomer = (...customers) =>
+  stripe.customers
+    .retrieve(...customers)
+    .then(displayResult('get customer'));
 
-const createCustomers = users =>
-  Promise.all(users.map(user => stripe.customers.create(
-    {email: user.email},
-    {stripe_account: user.id}
-  )))
-  .then(displayResult('create customers'))
-  .then(() => users);
+const listCustomers = limit =>
+  stripe.customers
+    .list({ limit })
+    .then(displayResult('list customers'));
 
-createAccounts()
-  .then(createCustomers)
-  .then(tenantPayment({ amount: 1000, token: 'tok_mastercard_debit_transferSuccess' }))
-  .then(tenantPayment({ amount: 2000, token: 'tok_mastercard_debit_transferSuccess' }))
-  .then(landlordTransfer({ amount: 2000 }))
+const createCard = (req, res) => {
+  const { body: { token } } = req;
+  const { customers: [user] } = store;
 
-
-const createBankAccount = (req, res) => {
-  stripe.accounts.createExternalAccount(
-  "acct_1Chy7wAbkXS1rGRX",
-  { external_account: "btok_1CiIS1AbkXS1rGRX31EBUMd4" },
-  function(err, bank_account) {
-    // asynchronously called
-  }
-);
+  stripe.customers.createSource('cus_D8bnegadfGbQQu', {
+    source: token.id,
+  })
+  .then(displayResult('create card'))
+  .then(res => res.status(200).jsonp(res))
+  .catch((err) => {
+    console.log(err)
+    res.sendStatus(500);
+  });
 };
 
-app.post('/api/payement', (req, res) => {
+const payment = (req, res) => {
   const { body: { token } } = req;
   res.status(200).jsonp(token);
-});
+};
+
+app.post('/api/payement', payment);
+app.post('/api/create-card', createCard);
+
+// getCustomer('cus_D8bnegadfGbQQu')
+createAccounts()
+  .then(createCustomers)
+  .then(() => listCustomers(100));
+  // .then(tenantPayment({ amount: 1000, token: 'tok_mastercard_debit_transferSuccess' }))
+  // .then(tenantPayment({ amount: 2000, token: 'tok_mastercard_debit_transferSuccess' }))
+  // .then(landlordTransfer({ amount: 2000 }))

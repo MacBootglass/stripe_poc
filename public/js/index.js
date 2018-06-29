@@ -56,10 +56,9 @@ form.addEventListener('submit', function(event) {
       errorElement.textContent = result.error.message;
     } else {
       // Send the token to your server.
-      console.log(result.token)
       axios({
         method: 'post',
-        url: '/api/payement',
+        url: '/api/create-card',
         data: {
           token: result.token,
         }
